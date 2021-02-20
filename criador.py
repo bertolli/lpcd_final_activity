@@ -1,42 +1,47 @@
 import psycopg2
 
-#Set your variables here!
-your_db = "postgres"
-your_user = "postgres"
-your_host = "127.0.0.1"
-your_port = "5432"
-your_password = "root"
+#Set your local variables here!
+params = dict(
+    database = "postgres",
+    user = "postgres",
+    host = "127.0.0.1",
+    port = "5432",
+    password = "root")
+
+def connect_db(params_dic):
+    conn = None
+    try:
+        # connect to the PostgreSQL server
+        print('Connecting to the %s database...' % params_dic.get("database"), end='')
+        conn = psycopg2.connect(**params_dic)
+        conn.autocommit = True
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+        sys.exit(1)
+    print("Connection successful!")
+    return conn, conn.cursor()
 
 #establishing the connection
-conn = psycopg2.connect(database=your_db, user=your_user, password=your_password, host=your_host, port= your_port)
+conn, cursor = connect_db(params)
 
-#auto commit enable
-conn.autocommit = True
-
-#Creating a cursor object using the cursor() method
-cursor = conn.cursor()
-
-#Create db
+#Create db grupo_e
 cursor.execute('''DROP DATABASE IF EXISTS grupo_e''')
 sql_create = '''CREATE database grupo_e''';
 
 cursor.execute(sql_create)
-print("Base de dados grupo_e criada com sucesso!")
+print("Database grupo_e created successfully!")
 conn.close()
 cursor.close()
 
-#connecting on created db
-conn = psycopg2.connect(database="grupo_e", user=your_user, password=your_password, host=your_host, port= your_port)
-conn.autocommit = True
-cursor = conn.cursor()
-
+#connecting on created db grupo_e
+params.update(database="grupo_e")
+conn,cursor = connect_db(params)
 
 #Drop before create
 cursor.execute("DROP TABLE IF EXISTS registro_covid")
 cursor.execute("DROP TABLE IF EXISTS cidade")
 
 #Creating table cidade
-
 sql_cidade ='''CREATE TABLE cidade(
 	cod_ibge bigint not null,
 	nome varchar,
@@ -45,11 +50,9 @@ sql_cidade ='''CREATE TABLE cidade(
 	CONSTRAINT cidade_pk PRIMARY KEY(cod_ibge)
 )'''
 cursor.execute(sql_cidade)
-conn.commit()
-print("Tabela cidade criada com sucesso!")
+print("Table cidade created successfully!")
 
 #Creating table registro_covid
-
 sql_covid ='''create table registro_covid(
 	"data" date,
 	cod_ibge bigint,
@@ -64,12 +67,13 @@ sql_covid ='''create table registro_covid(
 	CONSTRAINT cidade_fk FOREIGN KEY (cod_ibge) references cidade (cod_ibge)
 )'''
 cursor.execute(sql_covid)
-conn.commit()
-print("Tabela registro_covid criada com sucesso!")
-
+print("Table registro_covid created successfully!")
 
 #Closing the connection
 conn.close()
 cursor.close()
-print("Fechando a conexão")
+print("Closing connection")
+
+
+
 
