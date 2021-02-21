@@ -2,87 +2,97 @@ import pandas as pd
 import psycopg2
 import psycopg2.extras as extras
 
+#Change your db variables on main function
 
-## BD
-#Set your local variables here!
-params = dict(
-    database = "grupo_e",
-    user = "postgres",
-    host = "127.0.0.1",
-    port = "5432",
-    password = "root")
-
+#DB connection
 def connect_db(params_dic):
     conn = None
     try:
         # connect to the PostgreSQL server
-        print('Connecting to the %s database...' % params_dic.get("database"), end='')
+        print('%s database...' % params_dic.get("database"), end='')
         conn = psycopg2.connect(**params_dic)
         conn.autocommit = True
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
+    except (Exception) as error:
+        print("Unable to connect ", error)
         sys.exit(1)
     print("Connection successful!")
     return conn, conn.cursor()
 
-#establishing the connection
-conn, cursor = connect_db(params)
-#####
-
-##Carega DF
-df_completo = pd.read_csv("covid19_casos_brasil.csv")
-
-#colunas cidade
-cols_cidade = ['city_ibge_code', 'city', 'estimated_population_2019', 'state']
-
-#cria um novo DF somente com as colunas desejadas
+#Returns new df with selected columns
 def select_columns(data_frame, column_names):
     new_frame = data_frame.loc[:, column_names]
     return new_frame
 
 
-# Exemplo de cidade para filtrar
-cidades = ['Sorocaba', 'Ponta Grossa', 'Curitiba', 'Manaus', 'São Paulo']
-
-#Cria df apenas com as cidades no array
-frames = list()
-for c in cidades:
-    frames.append(df_completo[df_completo['city'] == c])
-    df_cidades = pd.concat(frames)
-
-#apenas colunas desejadas
-df_cidades = select_columns(df_cidades,cols_cidade)
-
-#remove duplicados
-df_cidades = df_cidades.drop_duplicates(subset=['city_ibge_code'])
-
-#rename das colunas de acordo com o db
-df_cidades_insert = df_cidades.rename(columns={'city_ibge_code': 'cod_ibge', 'city': 'nome', 'estimated_population_2019': 'populacao', 'state': 'estado'})
-
-
-# Funcao insert atraves de um df
-def execute_values(conn, datafrm, table):
-    # Cria tupla
+#Inserts by a given DF
+def execute_insert(cursor, datafrm, table):
+    # Creates tuple
     tpls = [tuple(x) for x in datafrm.to_numpy()]
 
-    # Cria colunas
+    # Identifies columns
     cols = ','.join(list(datafrm.columns))
 
-    # Cria sql
+    # Creates sql
     sql = "INSERT INTO %s(%s) VALUES %%s" % (table, cols)
-    cursor = conn.cursor()
     try:
         extras.execute_values(cursor, sql, tpls)
-        print("Insert db successfully..")
-    except (Exception, psycopg2.DatabaseError) as err:
-        # pass exception to function
-        show_psycopg2_exception(err)
+        print("Data was successfully inserted into %s" % table)
+    except (Exception) as err:
+        print(err)
         cursor.close
 
 
-execute_values(conn,df_cidades_insert, "cidade")
+def main():
 
-#Closing the connection
-conn.close()
-cursor.close()
-print("Closing connection")
+    #Set your connection variables here
+    params = dict(
+        database="grupo_e",
+        user="postgres",
+        host="127.0.0.1",
+        port="5432",
+        password="root")
+
+    #Set you .csv path here
+    csv_file_path = "covid19_casos_brasil.csv"
+
+    #Load DF
+    full_df = pd.read_csv(csv_file_path)
+
+    #City columns
+    cols_city = ['city_ibge_code', 'city', 'estimated_population_2019', 'state']
+
+    #Covid columns
+    cols_covid = ['date', 'city_ibge_code', 'last_available_confirmed',
+              'last_available_deaths', 'epidemiological_week', 'new_confirmed',
+              'new_deaths', 'last_available_date', 'last_available_death_rate']
+
+    #Filters chosen cities
+    cities = ['Sorocaba', 'Ponta Grossa', 'Curitiba', 'Manaus', 'São Paulo']
+
+    #Create new DF with chosen cities
+    frames = list()
+    for c in cities:
+        frames.append(full_df[full_df['city'] == c])
+        df_cities_covid = pd.concat(frames)
+
+    #splits DF into cities and covid stats
+    df_cities = select_columns(df_cities_covid,cols_city)
+    df_covid = select_columns(df_cities_covid, cols_covid)
+
+    #removes duplicates cities according ibge_cod
+    df_cities = df_cities.drop_duplicates(subset=['city_ibge_code'])
+
+    #renames columns according database dictionary
+    df_cities_insert = df_cities.rename(columns={'city_ibge_code': 'cod_ibge', 'city': 'nome', 'estimated_population_2019': 'populacao', 'state': 'estado'})
+    df_covid_insert = df_covid.rename(columns={'date': 'data','city_ibge_code': 'cod_ibge'})
+
+    #inserts data on tables cidade and registro_covid
+    conn, cursor = connect_db(params)
+    execute_insert(cursor, df_cities_insert, "cidade")
+    execute_insert(cursor, df_covid_insert, "registro_covid")
+
+    conn.close()
+    cursor.close()
+
+if __name__ == "__main__":
+    main()
